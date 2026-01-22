@@ -5,6 +5,7 @@ import requests
 import feedparser
 from datetime import datetime
 import re
+import urllib.parse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,8 +25,9 @@ RSS_QUERIES = [
 
 def get_google_news_rss(query):
     """구글 뉴스 RSS에서 검색어로 뉴스 가져오기"""
-    base_url = "https://news.google.com/rss/search?q={}&hl=ko&gl=KR&ceid=KR:ko"
-    return base_url.format(query)
+    encoded_query = urllib.parse.quote(query)
+    base_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
+    return base_url
 
 def fetch_rss_items():
     """여러 키워드의 RSS를 수집하여 통합 리스트 반환"""
