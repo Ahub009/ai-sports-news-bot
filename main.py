@@ -34,8 +34,9 @@ RSS_QUERIES_KR_POLICY = [
 
 # 3. 국내 일반 뉴스 (네이버 뉴스 섹션 스크래핑)
 NAVER_SECTIONS = [
-    {"id": "105", "name": "IT/과학"},
-    {"id": "101", "name": "경제"}
+    {"id": "100", "name": "정치"},    # Politics (Policy)
+    {"id": "105", "name": "IT/과학"}, # Science/IT
+    {"id": "101", "name": "경제"}     # Economy
 ]
 
 # 국가별 구글 뉴스 설정
@@ -173,11 +174,12 @@ def get_usable_model_name():
         print(f"⚠️ 모델 검색 중 오류: {e}")
         return None
 
-def analyze_and_filter_news(news_items):
+def analyze_news_group(news_items, category_name):
+    """특정 그룹(국내/해외)의 뉴스 중 Top 10 선별"""
     if not news_items:
         return []
 
-    print(f"🧠 총 {len(news_items)}개의 후보 기사 분석 및 선별 중...")
+    print(f"🧠 '{category_name}' 분야 후보 {len(news_items)}개 분석 및 선별 중...")
     
     # 동적으로 모델 찾기
     model_name = get_usable_model_name()
@@ -202,30 +204,27 @@ def analyze_and_filter_news(news_items):
     news_text = json.dumps(simplified_items, ensure_ascii=False)
     
     prompt = f"""
-    너는 'AI 산업 전반'과 '스포츠 비즈니스'를 모두 다루는 스타트업의 리서치 팀장이야.
-    우리는 너무 엄격한 기준보다는, **넓은 시야의 산업 동향**을 파악하고 싶어.
-    
-    제공된 뉴스 후보군(JSON)에서 우리에게 도움이 될 만한 뉴스를 선별해줘.
+    너는 'AI/스포츠 스타트업 리서치 팀장'이야.
+    이번 작업은 **[{category_name}]** 관련 뉴스 중 우리에게 가장 가치 있는 **Top 10**을 선정하는 거야.
 
     [후보군 데이터]:
     {news_text}
 
-    [선별 기준 (상당히 관대하게 적용)]:
-    1. **지역 우선순위**: **[해외] 미국/글로벌 뉴스**는 가장 선진적인 트렌드이므로 **반드시 3개 이상 포함**하도록 노력해. 영국/일본/중국 뉴스는 정말 중요한 내용이 있을 때만 포함해(없으면 과감히 생략).
-    2. **정부 정책**: 한국 정부(과기부/문체부)의 지원 사업/정책은 발견 즉시 **무조건 포함**.
-    3. **산업 분야**: AI(비주얼, 생성형, 로봇, 반도체) 및 스포츠 비즈니스 전반.
-    4. **제외 대상**: 오직 '단순 경기 스코어(누가 이겼다)'와 '연예인 가십'만 제외해.
+    [선별 가이드라인]:
+    1. **{category_name}** 관점에서 가장 중요한 소식을 우선해.
+    2. **국내**인 경우: 정부 정책(과기부/문체부), 대기업의 AI/스포츠 투자, 규제 이슈 집중. (단순 정쟁/가십 절대 제외)
+    3. **해외**인 경우: 글로벌 AI 트렌드, 빅테크 움직임, 해외 스포츠 비즈니스 모델. (반드시 한국어로 번역/요약)
+    4. **공통**: 경기 스코어, 연예인 이슈 컷.
 
-    [작성 지침]:
-    - **수량**: **최소 5개 ~ 최대 10개**. (기준이 조금 애매해도 연관성 있으면 과감하게 포함해서 개수를 채울 것!)
-    - **언어**: 해외 뉴스는 반드시 **한국어로 번역**해서 요약.
-    - **요약**: "관련 산업군에 긍정적/부정적 요인으로 작용할 예정" 등의 비즈니스 톤앤매너.
+    [작성 양식]:
+    - **수량**: 중요도 순으로 **최대 10개**. (없으면 5개라도 알짜배기로)
+    - **요약**: 비즈니스 인사이트가 담긴 1-2줄 요약.
 
     [출력 포맷 - JSON Array Only]:
     [
       {{
         "title": "기사 제목",
-        "summary": "핵심 인사이트 (한국어)",
+        "summary": "핵심 인사이트",
         "original_link": "링크",
         "source": "출처 표기"
       }}
@@ -240,19 +239,15 @@ def analyze_and_filter_news(news_items):
             text = response.json().get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '[]')
             clean_text = re.sub(r"```json|```", "", text).strip()
             
-            # 디버깅: 원본이 너무 짧거나 이상하면 출력
+            # 디버깅
             if len(clean_text) < 10:
                 print(f"⚠️ Gemini 응답이 비정상적으로 짧음: {clean_text}")
 
-            # JSON 파싱 시도 (대괄호 찾기)
             match = re.search(r'\[.*\]', clean_text, re.DOTALL)
             final_text = match.group(0) if match else clean_text
             
             try:
-                result = json.loads(final_text)
-                if not result:
-                    print(f"⚠️ Gemini가 빈 리스트([])를 반환했습니다. 원본 텍스트:\n{text[:500]}...")
-                return result
+                return json.loads(final_text)
             except json.JSONDecodeError as je:
                 print(f"⚠️ JSON 파싱 실패. 원본 응답:\n{text}")
                 return []
@@ -266,42 +261,53 @@ def analyze_and_filter_news(news_items):
     
     return []
 
-def send_discord_report(news_list):
+def send_discord_report(domestic_list, overseas_list):
     if not DISCORD_WEBHOOK_URL:
         print("디스코드 웹훅 URL 없음")
         return
-    if not news_list:
-        print("전송할 뉴스가 없음")
+    if not domestic_list and not overseas_list:
+        print("전송할 뉴스가 아예 없음")
         return
 
     today = datetime.now().strftime("%Y년 %m월 %d일")
     
     embed = {
-        "title": f"📰 {today} AI·스포츠 스타트업 데일리 브리핑",
-        "description": "국내외 산업 동향 및 주요 정부 정책 모니터링",
+        "title": f"📰 {today} AI & 스포츠 비즈니스 데일리",
+        "description": "국내(정책/산업) 및 해외(Global Tech) 핵심 리포트",
         "color": 0x00ff00,
         "fields": [],
         "footer": {
-            "text": "Powered by Gemini Agent",
+            "text": "Strategy Team Agent via Gemini",
         }
     }
     
-    for news in news_list:
-        # 소스에 따라 아이콘이나 태그를 다르게 할 수도 있음
-        source_display = news.get('source', '뉴스')
-        # AI가 source를 덮어쓰지 않았다면 원본 source 사용
-        if '[' not in source_display and 'Google' in source_display and 'KR' in source_display:
-             source_display = "[정책]"
-        elif '[' not in source_display and 'Google' in source_display:
-             source_display = "[해외]"
-        elif '[' not in source_display and 'Naver' in source_display:
-             source_display = "[국내]"
-             
+    # 1. 국내 파트
+    if domestic_list:
         embed["fields"].append({
-            "name": f"{source_display} {news['title']}",
-            "value": f"{news['summary']}\n[🔗 기사 읽기]({news['original_link']})",
+            "name": "🇰🇷 국내 핵심 뉴스 (Top 10)",
+            "value": "-----------------------------------",
             "inline": False
         })
+        for news in domestic_list:
+            embed["fields"].append({
+                "name": f"{news.get('source','[국내]')} {news['title']}",
+                "value": f"{news['summary']}\n[🔗 원문]({news['original_link']})",
+                "inline": False
+            })
+            
+    # 2. 해외 파트
+    if overseas_list:
+        embed["fields"].append({
+            "name": "🌎 해외 트렌드 (Top 10)",
+            "value": "-----------------------------------",
+            "inline": False
+        })
+        for news in overseas_list:
+            embed["fields"].append({
+                "name": f"{news.get('source','[해외]')} {news['title']}",
+                "value": f"{news['summary']}\n[🔗 원문]({news['original_link']})",
+                "inline": False
+            })
         
     payload = {"embeds": [embed]}
     
@@ -335,16 +341,20 @@ if __name__ == "__main__":
     # 1-3. 국내 일반 (네이버 섹션)
     domestic_items = fetch_naver_news()
     
-    all_items = overseas_items + policy_items + domestic_items
+    # 2. 그룹별 분리 및 분석
     
-    if all_items:
-        # 2. 분석
-        print(f"📦 총 수집된 뉴스 후보: {len(all_items)}개")
-        selected = analyze_and_filter_news(all_items)
-        if selected:
-            print(f"👉 최종 선별된 뉴스: {len(selected)}건")
-            send_discord_report(selected)
-        else:
-            print("🤔 조건에 맞는 뉴스가 없어 전송하지 않았습니다.")
+    # A. 해외 그룹 (미국/영국/일본/홍콩)
+    print(f"📦 해외 뉴스 후보: {len(overseas_items)}개")
+    final_overseas = analyze_news_group(overseas_items, "해외(Global Top 10)")
+
+    # B. 국내 그룹 (정책 + 네이버 일반)
+    domestic_total = policy_items + domestic_items
+    print(f"📦 국내 뉴스 후보: {len(domestic_total)}개 (정책 {len(policy_items)} + 일반 {len(domestic_items)})")
+    final_domestic = analyze_news_group(domestic_total, "국내(정책/산업 Top 10)")
+    
+    # 3. 통합 리포트 전송
+    if final_overseas or final_domestic:
+        print(f"👉 최종 선별: 해외 {len(final_overseas)}건, 국내 {len(final_domestic)}건")
+        send_discord_report(final_domestic, final_overseas)
     else:
-        print("❌ 수집된 뉴스가 없습니다.")
+        print("🤔 선별된 뉴스가 하나도 없습니다.")
