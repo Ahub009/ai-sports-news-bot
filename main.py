@@ -174,12 +174,12 @@ def get_usable_model_name():
         print(f"⚠️ 모델 검색 중 오류: {e}")
         return None
 
-def analyze_news_group(news_items, category_name):
-    """특정 그룹(국내/해외)의 뉴스 중 Top 10 선별"""
+def analyze_news_group(news_items, category_name, limit=10):
+    """특정 그룹(국내/해외)의 뉴스 중 Top N 선별"""
     if not news_items:
         return []
 
-    print(f"🧠 '{category_name}' 분야 후보 {len(news_items)}개 분석 및 선별 중...")
+    print(f"🧠 '{category_name}' 분야 후보 {len(news_items)}개 분석 및 선별 중 (목표: Top {limit})...")
     
     # 동적으로 모델 찾기
     model_name = get_usable_model_name()
@@ -205,7 +205,7 @@ def analyze_news_group(news_items, category_name):
     
     prompt = f"""
     너는 'AI/스포츠 스타트업 리서치 팀장'이야.
-    이번 작업은 **[{category_name}]** 관련 뉴스 중 우리에게 가장 가치 있는 **Top 10**을 선정하는 거야.
+    이번 작업은 **[{category_name}]** 관련 뉴스 중 우리에게 가장 가치 있는 **Top {limit}**을 선정하는 거야.
 
     [후보군 데이터]:
     {news_text}
@@ -217,7 +217,8 @@ def analyze_news_group(news_items, category_name):
     4. **공통**: 경기 스코어, 연예인 이슈 컷.
 
     [작성 양식]:
-    - **수량**: 중요도 순으로 **최대 10개**. (없으면 5개라도 알짜배기로)
+    - **수량**: 중요도 순으로 **정확히 {limit}개** 추천해줘. 만약 후보가 너무 부족하면 최소 3개는 선정해.
+    - **순서**: 가장 중요한 뉴스가 1번에 오도록 배치해.
     - **요약**: 비즈니스 인사이트가 담긴 1-2줄 요약.
 
     [출력 포맷 - JSON Array Only]:
@@ -286,15 +287,27 @@ def send_discord_report(domestic_list, overseas_list):
             }
         }
         
-        for news in items:
+        for i, news in enumerate(items):
             # 요약이 너무 길면 잘라서 전송 오류 방지
             summary = news['summary']
             if len(summary) > 300:
                 summary = summary[:297] + "..."
-                
+            
+            # Top 1 별도 표기
+            is_top_one = (i == 0)
+            title_prefix = "⭐ [MUST READ] " if is_top_one else "🔹 "
+            
+            value_text = (
+                f"**분류**: {news.get('source','[기타]')}\n"
+                f"**기사제목**: {news['title']}\n"
+                f"**내용요약**: {summary}\n"
+                f"**원문링크**: [🔗 기사 전문 보기]({news['original_link']})\n"
+                f"\u200b" # 투명 문자로 간격 확보
+            )
+            
             embed["fields"].append({
-                "name": f"{news.get('source','[뉴스]')} {news['title']}",
-                "value": f"{summary}\n[🔗 원문]({news['original_link']})",
+                "name": f"{title_prefix} {'TOP 1' if is_top_one else f'News {i+1}'}",
+                "value": value_text,
                 "inline": False
             })
             
@@ -356,12 +369,12 @@ if __name__ == "__main__":
     
     # A. 해외 그룹 (미국/영국/일본/홍콩)
     print(f"📦 해외 뉴스 후보: {len(overseas_items)}개")
-    final_overseas = analyze_news_group(overseas_items, "해외(Global Top 10)")
+    final_overseas = analyze_news_group(overseas_items, "해외(Global Top 7)", limit=7)
 
     # B. 국내 그룹 (정책 + 네이버 일반)
     domestic_total = policy_items + domestic_items
     print(f"📦 국내 뉴스 후보: {len(domestic_total)}개 (정책 {len(policy_items)} + 일반 {len(domestic_items)})")
-    final_domestic = analyze_news_group(domestic_total, "국내(정책/산업 Top 10)")
+    final_domestic = analyze_news_group(domestic_total, "국내(정책/산업 Top 5)", limit=5)
     
     # 3. 통합 리포트 전송
     if final_overseas or final_domestic:
