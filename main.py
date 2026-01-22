@@ -321,16 +321,12 @@ def send_discord_report(domestic_list, overseas_list):
 
     # 2. 해외 파트 전송
     if overseas_list:
-                "inline": False
-            })
-        
-    payload = {"embeds": [embed]}
-    
-    try:
-        requests.post(DISCORD_WEBHOOK_URL, json=payload)
-        print("✅ 디스코드 전송 완료")
-    except Exception as e:
-        print(f"디스코드 전송 실패: {e}")
+        send_single_embed(
+            f"🌎 {today} 해외 글로벌 테크 트렌드",
+            "미국, 유럽, 아시아 주요 뉴스 번역 리포트",
+            overseas_list,
+            0x3498db # Blue
+        )
 
 if __name__ == "__main__":
     # 1. 수집
