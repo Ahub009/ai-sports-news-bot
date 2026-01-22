@@ -164,7 +164,7 @@ def analyze_and_filter_news(news_items):
         "title": "기사 제목",
         "summary": "핵심 인사이트 (한국어)",
         "original_link": "링크",
-        "source": "출처 표기 (예: [정책], [해외], [네이버])"
+        "source": "출처 표기 (예: [정책], [해외], [국내])"
       }}
     ]
     """
