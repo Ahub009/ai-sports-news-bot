@@ -121,13 +121,72 @@ def fetch_naver_news():
             
     return items
 
+def get_usable_model_name():
+    """API에 직접 물어봐서 진짜로 사용 가능한 모델 이름을 가져옵니다."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+    
+    try:
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"⚠️ 모델 목록 조회 실패: {response.text}")
+            return None
+            
+        data = response.json()
+        if 'models' not in data:
+            print("⚠️ 모델 목록이 비어있습니다.")
+            return None
+
+        # 사용 가능한 모델 찾기
+        candidates = []
+        for model in data['models']:
+            name = model['name'].replace('models/', '')
+            methods = model.get('supportedGenerationMethods', [])
+            
+            if 'generateContent' in methods:
+                candidates.append(name)
+        
+        print(f"📋 내 키로 접근 가능한 모델들: {candidates}")
+        
+        preferred = [
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-pro',
+            'gemini-1.0-pro',
+            'gemini-pro'
+        ]
+        
+        for p in preferred:
+            if p in candidates:
+                return p
+                
+        # 차선책
+        for c in candidates:
+            if 'gemini' in c and 'vision' not in c:
+                return c
+                
+        if candidates:
+            return candidates[0]
+            
+        return None
+
+    except Exception as e:
+        print(f"⚠️ 모델 검색 중 오류: {e}")
+        return None
+
 def analyze_and_filter_news(news_items):
     if not news_items:
         return []
 
     print(f"🧠 총 {len(news_items)}개의 후보 기사 분석 및 선별 중...")
     
-    model_name = "gemini-1.5-flash"
+    # 동적으로 모델 찾기
+    model_name = get_usable_model_name()
+    if not model_name:
+        print("❌ 사용 가능한 모델을 찾지 못해 기본값(gemini-pro)으로 시도합니다.")
+        model_name = "gemini-pro"
+        
+    print(f"✨ 선택된 모델: {model_name}")
+    
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
