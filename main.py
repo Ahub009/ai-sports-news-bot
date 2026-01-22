@@ -271,41 +271,56 @@ def send_discord_report(domestic_list, overseas_list):
 
     today = datetime.now().strftime("%Y년 %m월 %d일")
     
-    embed = {
-        "title": f"📰 {today} AI & 스포츠 비즈니스 데일리",
-        "description": "국내(정책/산업) 및 해외(Global Tech) 핵심 리포트",
-        "color": 0x00ff00,
-        "fields": [],
-        "footer": {
-            "text": "Strategy Team Agent via Gemini",
+    def send_single_embed(title, desc, items, color):
+        """임베드 하나를 전송하는 헬퍼 함수"""
+        if not items:
+            return
+
+        embed = {
+            "title": title,
+            "description": desc,
+            "color": color,
+            "fields": [],
+            "footer": {
+                "text": "Strategy Team Agent via Gemini",
+            }
         }
-    }
-    
-    # 1. 국내 파트
-    if domestic_list:
-        embed["fields"].append({
-            "name": "🇰🇷 국내 핵심 뉴스 (Top 10)",
-            "value": "-----------------------------------",
-            "inline": False
-        })
-        for news in domestic_list:
+        
+        for news in items:
+            # 요약이 너무 길면 잘라서 전송 오류 방지
+            summary = news['summary']
+            if len(summary) > 300:
+                summary = summary[:297] + "..."
+                
             embed["fields"].append({
-                "name": f"{news.get('source','[국내]')} {news['title']}",
-                "value": f"{news['summary']}\n[🔗 원문]({news['original_link']})",
+                "name": f"{news.get('source','[뉴스]')} {news['title']}",
+                "value": f"{summary}\n[🔗 원문]({news['original_link']})",
                 "inline": False
             })
             
-    # 2. 해외 파트
+        payload = {"embeds": [embed]}
+        
+        try:
+            response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+            if response.status_code in [200, 204]:
+                print(f"✅ 디스코드 전송 완료: {title}")
+            else:
+                print(f"❌ 디스코드 오류 ({response.status_code}): {response.text}")
+        except Exception as e:
+            print(f"디스코드 요청 중 예외 발생: {e}")
+
+    # 1. 국내 파트 전송
+    if domestic_list:
+        send_single_embed(
+            f"🇰🇷 {today} 국내 AI/스포츠 정책 & 산업",
+            "정부 지원 사업 및 네이버 뉴스 요약",
+            domestic_list,
+            0x00ff00 # Green
+        )
+        time.sleep(1) # 순서 보장 및 레이트 리밋 방지
+
+    # 2. 해외 파트 전송
     if overseas_list:
-        embed["fields"].append({
-            "name": "🌎 해외 트렌드 (Top 10)",
-            "value": "-----------------------------------",
-            "inline": False
-        })
-        for news in overseas_list:
-            embed["fields"].append({
-                "name": f"{news.get('source','[해외]')} {news['title']}",
-                "value": f"{news['summary']}\n[🔗 원문]({news['original_link']})",
                 "inline": False
             })
         
