@@ -55,6 +55,51 @@ def get_google_news_rss_url(query, region_code='US'):
     base_url = f"https://news.google.com/rss/search?q={encoded_query}&hl={config['hl']}&gl={config['gl']}&ceid={config['ceid']}"
     return base_url, config['name']
 
+def extract_3grams(text):
+    """문장에서 3-gram 추출 (공백 제거 후 3글자씩)"""
+    # 전처리: 특수문자 제거 및 공백 압축
+    text = re.sub(r'[^가-힣a-zA-Z0-9\s]', '', text)
+    text = "".join(text.split())
+    if len(text) < 3:
+        return set([text])
+    return set(text[i:i+3] for i in range(len(text)-2))
+
+def calculate_jaccard_similarity(set1, set2):
+    """두 세트 간의 자카드 유사도 계산"""
+    if not set1 or not set2:
+        return 0.0
+    intersection = len(set1.intersection(set2))
+    union = len(set1.union(set2))
+    return intersection / union if union > 0 else 0.0
+
+def deduplicate_news(items, threshold=0.7):
+    """3-gram 기반 중복 뉴스 필터링"""
+    if not items:
+        return []
+        
+    unique_items = []
+    seen_grams = []
+    
+    for item in items:
+        # 제목의 첫 부분이나 스니펫을 기준으로 유사도 검사
+        target_text = item['title']
+        grams = extract_3grams(target_text)
+        
+        is_duplicate = False
+        for saved_grams in seen_grams:
+            similarity = calculate_jaccard_similarity(grams, saved_grams)
+            if similarity >= threshold:
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            unique_items.append(item)
+            seen_grams.append(grams)
+        else:
+            print(f"🚫 중복 뉴스 필터링됨: {item['title']}")
+            
+    return unique_items
+
 def fetch_google_rss_items(queries, target_regions=['US'], source_label_prefix="[해외]"):
     """구글 RSS 기반 뉴스 수집 (다중 국가 지원)"""
     items = []
@@ -373,7 +418,12 @@ if __name__ == "__main__":
 
     # B. 국내 그룹 (정책 + 네이버 일반)
     domestic_total = policy_items + domestic_items
-    print(f"📦 국내 뉴스 후보: {len(domestic_total)}개 (정책 {len(policy_items)} + 일반 {len(domestic_items)})")
+    print(f"📦 국내 뉴스 후보(필터 전): {len(domestic_total)}개 (정책 {len(policy_items)} + 일반 {len(domestic_items)})")
+    
+    # 중복 제거 적용
+    domestic_total = deduplicate_news(domestic_total)
+    print(f"📦 국내 뉴스 후보(필터 후): {len(domestic_total)}개")
+    
     final_domestic = analyze_news_group(domestic_total, "국내(정책/산업 Top 5)", limit=5)
     
     # 3. 통합 리포트 전송
