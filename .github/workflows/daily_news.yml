@@ -2,8 +2,8 @@ name: Daily AI & Sports News Monitor
 
 on:
   schedule:
-    # 11:53 AM KST is 2:53 AM UTC
-    - cron: '53 2 * * *'
+    # 11:47 AM KST is 2:47 AM UTC
+    - cron: '47 2 * * *'
   workflow_dispatch: # Manual trigger
 
 jobs:
